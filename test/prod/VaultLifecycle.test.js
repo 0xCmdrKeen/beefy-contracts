@@ -2,7 +2,7 @@ const { expect } = require("chai");
 import { addressBook } from "blockchain-addressbook";
 import { chainCallFeeMap } from "../../utils/chainCallFeeMap";
 
-const { zapNativeToToken, getVaultWant, unpauseIfPaused, getUnirouterData } = require("../../utils/testHelpers");
+const { zapNativeToToken, zapNativeToCurve, getVaultWant, unpauseIfPaused, getUnirouterData } = require("../../utils/testHelpers");
 const { delay } = require("../../utils/timeHelpers");
 
 const TIMEOUT = 10 * 60 * 1000000;
@@ -37,14 +37,29 @@ describe("VaultLifecycleTest", () => {
     unirouter = await ethers.getContractAt(unirouterData.interface, unirouterAddr);
     want = await getVaultWant(vault, config.wnative);
 
-    await zapNativeToToken({
-      amount: config.testAmount,
-      want,
-      nativeTokenAddr: config.wnative,
-      unirouter,
-      swapSignature: unirouterData.swapSignature,
-      recipient: deployer.address,
-    });
+    if ('crv' in strategy) {
+      await zapNativeToCurve({
+        amount: config.testAmount,
+        poolAddr: await strategy.pool(),
+        poolSize: await strategy.poolSize(),
+        depositTokenAddr: await strategy.depositToken(),
+        depositIndex: await strategy.depositIndex(),
+        useUnderlying: await strategy.useUnderlying(),
+        nativeTokenAddr: config.wnative,
+        unirouter,
+        swapSignature: unirouterData.swapSignature,
+        recipient: deployer.address,
+      });
+    } else {
+      await zapNativeToToken({
+        amount: config.testAmount,
+        want,
+        nativeTokenAddr: config.wnative,
+        unirouter,
+        swapSignature: unirouterData.swapSignature,
+        recipient: deployer.address,
+      });
+    }
     const wantBal = await want.balanceOf(deployer.address);
     await want.transfer(other.address, wantBal.div(2));
   });
@@ -172,7 +187,7 @@ describe("VaultLifecycleTest", () => {
       try {
         const tokenAddress = await strategy.outputToLp0Route(i);
         if (tokenAddress in tokenAddressMap) {
-          console.log(tokenAddressMap[tokenAddress]);
+          console.log(tokenAddressMap[tokenAddress].symbol);
         } else {
           console.log(tokenAddress);
         }

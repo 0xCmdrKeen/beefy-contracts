@@ -60,6 +60,43 @@ const zapNativeToToken = async ({ amount, want, nativeTokenAddr, unirouter, swap
   }
 };
 
+const zapNativeToCurve = async ({
+  amount,
+  poolAddr,
+  poolSize,
+  depositTokenAddr,
+  depositIndex,
+  useUnderlying,
+  nativeTokenAddr,
+  unirouter,
+  swapSignature,
+  recipient,
+}) => {
+  try {
+    const token = await ethers.getContractAt("@openzeppelin/contracts/token/ERC20/IERC20.sol:IERC20", depositTokenAddr);
+
+    await swapNativeForToken({
+      token,
+      amount,
+      unirouter,
+      recipient,
+      nativeTokenAddr,
+      swapSignature,
+    });
+
+    const balance = await token.balanceOf(recipient);
+    await token.approve(poolAddr, balance);
+
+    const pool = await ethers.getContractAt(`ICurveSwap${+poolSize}`, poolAddr);
+    const amounts = Array(+poolSize).fill(0);
+    amounts[+depositIndex] = balance;
+
+    await pool[`add_liquidity(uint256[${+poolSize}],uint256,bool)`](amounts, 0, useUnderlying);
+  } catch (e) {
+    console.log("Could not add Curve liquidity", e);
+  }
+};
+
 const swapNativeForToken = async ({ unirouter, amount, nativeTokenAddr, token, recipient, swapSignature }) => {
   if (token.address === nativeTokenAddr) {
     await wrapNative(amount, nativeTokenAddr);
@@ -138,6 +175,7 @@ const wrapNative = async (amount, wNativeAddr) => {
 
 module.exports = {
   zapNativeToToken,
+  zapNativeToCurve,
   swapNativeForToken,
   getVaultWant,
   logTokenBalance,
